@@ -35,6 +35,7 @@ import type {
   ThreadPullRequestKey,
 } from "@t3tools/contracts";
 import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
+import { gitlabUploadSource, type GitLabUploadContext } from "@t3tools/shared/gitlabUploads";
 import { githubMediaFetchUrl } from "@t3tools/shared/githubMedia";
 import {
   isAtomCommandInterrupted,
@@ -229,6 +230,7 @@ interface ChatMarkdownProps {
   /** Loads GitHub-hosted media through `cwd`'s GitHub credential, which a private repository's
       uploads need; without it those images and videos load unauthenticated and 404. */
   githubMedia?: boolean | undefined;
+  gitlabUploads?: GitLabUploadContext | undefined;
   /** Levels added to each markdown heading in the accessibility tree so the
       text nests under the heading that introduces it, such as a chat message's
       author. Rendered tags and their styling are unchanged. */
@@ -1503,6 +1505,7 @@ const CHAT_MARKDOWN_IMAGE_FRAME_CLASS_NAME = cn(
 function ChatMarkdownImage(props: {
   /** Null while the URL is being resolved; the last decoded image stays up. */
   readonly src: string | null;
+  readonly onSourceError?: ((src: string) => void) | undefined;
   readonly sourceFailed?: boolean | undefined;
   readonly alt: string;
   readonly copyMarkdown: string | undefined;
@@ -1543,6 +1546,7 @@ function ChatMarkdownImage(props: {
       setFailedSrc(null);
     },
     onError: () => {
+      props.onSourceError?.(loadingSrc);
       setFailedSrc(loadingSrc);
       setLoadedSrc(null);
     },
@@ -1625,6 +1629,7 @@ function ChatMarkdownImage(props: {
 
 function ChatMarkdownVideo(props: {
   readonly src: string | null;
+  readonly fallbackSrc?: string | undefined;
   readonly alt: string;
   readonly copyMarkdown: string | undefined;
   readonly originalUrl?: string | undefined;
@@ -1638,6 +1643,7 @@ function ChatMarkdownVideo(props: {
     <MediaVideoPlayer
       key={props.mediaIdentity ?? props.copyMarkdown ?? props.src}
       src={props.src}
+      fallbackSrc={props.fallbackSrc}
       sourceFailed={props.sourceFailed}
       label={props.alt}
       originalUrl={props.originalUrl}
@@ -1663,7 +1669,14 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
   readonly environmentId: EnvironmentId;
   readonly resource: Extract<
     AssetResource,
-    { readonly _tag: "attachment" | "workspace-file" | "media-file" | "github-media" }
+    {
+      readonly _tag:
+        | "attachment"
+        | "workspace-file"
+        | "media-file"
+        | "github-media"
+        | "gitlab-upload";
+    }
   >;
   readonly kind?: "image" | "video";
   readonly alt: string;
@@ -1689,6 +1702,7 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
   readonly workspaceRoot?: string | undefined;
   readonly onImageExpand?: ((preview: ExpandedImagePreview) => void) | undefined;
 }) {
+  const [failedSignedSrc, setFailedSignedSrc] = useState<string | null>(null);
   const assetUrl = useAssetUrlState(props.environmentId, props.resource);
   const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, props.resource);
   const resource = props.resource;
@@ -1704,13 +1718,19 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
       ? mediaUrlReference(props.originalUrl)
       : undefined;
   const relativePath = reference?.kind === "file" ? reference.relativePath : undefined;
-  const fallbackSrc = assetUrl._tag === "Failure" ? props.fallbackSrc : undefined;
+  const fallbackSrc =
+    assetUrl._tag === "Failure" ||
+    (resource._tag === "gitlab-upload" &&
+      assetUrl._tag === "Success" &&
+      failedSignedSrc === assetUrl.url + (props.srcFragment ?? ""))
+      ? props.fallbackSrc
+      : undefined;
   const src =
-    assetUrl._tag === "Success"
-      ? assetUrl.url + (props.srcFragment ?? "")
-      : fallbackSrc === undefined
-        ? null
-        : fallbackSrc + (props.srcFragment ?? "");
+    fallbackSrc !== undefined
+      ? fallbackSrc + (props.srcFragment ?? "")
+      : assetUrl._tag === "Success"
+        ? assetUrl.url + (props.srcFragment ?? "")
+        : null;
   // The server reads the pixel size from the file header, so the slot can be
   // the image's final box instead of a 16:9 guess. An authored size wins; a
   // caller's height cap shrinks the box while keeping the ratio.
@@ -1748,6 +1768,11 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
     return (
       <ChatMarkdownVideo
         src={src}
+        fallbackSrc={
+          resource._tag === "gitlab-upload" && props.fallbackSrc
+            ? props.fallbackSrc + (props.srcFragment ?? "")
+            : undefined
+        }
         sourceFailed={assetUrl._tag === "Failure" && fallbackSrc === undefined}
         alt={props.alt}
         copyMarkdown={props.copyMarkdown}
@@ -1764,6 +1789,18 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
     <ChatMarkdownImage
       key={JSON.stringify([props.environmentId, props.resource, props.srcFragment])}
       src={src}
+      onSourceError={
+        resource._tag === "gitlab-upload"
+          ? (failed) => {
+              if (
+                assetUrl._tag === "Success" &&
+                failed === assetUrl.url + (props.srcFragment ?? "")
+              ) {
+                setFailedSignedSrc(failed);
+              }
+            }
+          : undefined
+      }
       sourceFailed={assetUrl._tag === "Failure" && fallbackSrc === undefined}
       alt={props.alt}
       copyMarkdown={props.copyMarkdown}
@@ -2336,6 +2373,7 @@ function useChatMarkdownState({
   renderContextReference,
   headingLevelOffset = 0,
   githubMedia = false,
+  gitlabUploads,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const [localMediaPreview, setLocalMediaPreview] = useState<ExpandedImagePreview | null>(null);
@@ -2728,6 +2766,7 @@ function useChatMarkdownState({
       expandMedia,
       fileLinkChip,
       githubMedia,
+      gitlabUploads,
       renderContextReference,
       headingLevelOffset,
       imageBaseDir,
@@ -2759,6 +2798,7 @@ function useChatMarkdownState({
       expandMedia,
       fileLinkChip,
       githubMedia,
+      gitlabUploads,
       renderContextReference,
       headingLevelOffset,
       imageBaseDir,
@@ -3170,6 +3210,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       cwd,
       environmentId,
       githubMedia,
+      gitlabUploads,
       imageBaseDir,
       threadRef,
       renderContextReference,
@@ -3197,6 +3238,29 @@ const CHAT_MARKDOWN_COMPONENTS = {
     const copyMarkdown = markdownImageCopy(altText, srcString, authoredTitle);
     const { className, style: _style, width, height, ...imageProps } = props;
     const authoredSizeStyle = authoredImageSizeStyle(width, height);
+    const gitlabUpload = gitlabUploads ? gitlabUploadSource(classifiedSrc, gitlabUploads) : null;
+    if (gitlabUpload !== null && environmentId !== null) {
+      const url = new URL(gitlabUpload.url);
+      url.hash = "";
+      return (
+        <ChatMarkdownAssetImage
+          environmentId={environmentId}
+          resource={{ _tag: "gitlab-upload", reference: gitlabUpload.reference }}
+          alt={altText}
+          kind={mediaKindFromPath(gitlabUpload.reference.fileName) ?? "image"}
+          copyMarkdown={copyMarkdown}
+          standalone={standalone}
+          className={className}
+          style={authoredSizeStyle}
+          imageProps={imageProps}
+          srcFragment={markdownImageSourceFragment(classifiedSrc)}
+          originalUrl={gitlabUpload.url}
+          fallbackSrc={url.toString()}
+          framed={false}
+          onImageExpand={imageExpand}
+        />
+      );
+    }
     const imageSource = classifyMarkdownImageSource(classifiedSrc, imageBaseDir ?? cwd);
     const kind = mediaKindFromPath(classifiedSrc) ?? "image";
     const directUri = imageSource._tag === "Direct" ? imageSource.uri : null;
