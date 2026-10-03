@@ -70,6 +70,15 @@ const make = Effect.gen(function* () {
             args,
             timeoutMs: 10_000,
             maxOutputBytes: 16 * 1024,
+            // Upload authors choose the host. Only its stored credentials may be used;
+            // glab otherwise sends a higher-priority ambient token during auth status.
+            env: {
+              GITLAB_TOKEN: "",
+              GITLAB_ACCESS_TOKEN: "",
+              OAUTH_TOKEN: "",
+              CI_JOB_TOKEN: "",
+              GLAB_ENABLE_CI_AUTOLOGIN: "false",
+            },
           });
         // auth status validates the token over the network. Check the effective protocol first.
         const protocol = yield* execute(["config", "get", "api_protocol", "--host", host]);

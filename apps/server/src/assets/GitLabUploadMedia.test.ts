@@ -12,6 +12,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { GitLabUploadReference } from "@t3tools/contracts";
 import * as GitLabUploadMedia from "./GitLabUploadMedia.ts";
 import * as GitLabCli from "../sourceControl/GitLabCli.ts";
+import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as ServerConfig from "../config.ts";
 
 const reference: GitLabUploadReference = {
@@ -33,6 +34,7 @@ function fixture(
     protocol?: string;
     endpoint?: string;
     token?: () => string;
+    environment?: NodeJS.ProcessEnv;
     response?: (
       request: { url: string; method: string; headers: Readonly<Record<string, string>> },
       index: number,
@@ -59,18 +61,30 @@ function fixture(
   });
   const layer = GitLabUploadMedia.layer.pipe(
     Layer.provide(
-      Layer.mock(GitLabCli.GitLabCli)({
-        execute: ({ args }) => {
-          commands.push(args);
-          return Effect.succeed(
-            output(
-              args[0] === "config"
-                ? (options.protocol ?? "https")
-                : `REST API Endpoint: ${options.endpoint ?? "https://api.example/api/v4/"}\nToken found in config file: ${options.token?.() ?? "private-credential"}`,
-            ),
-          );
-        },
-      }),
+      GitLabCli.layer.pipe(
+        Layer.provide(
+          Layer.mock(VcsProcess.VcsProcess)({
+            run: ({ args, env }) => {
+              commands.push(args);
+              const environment = { ...options.environment, ...env };
+              // glab gives ambient access tokens precedence over the selected host's stored token.
+              const token =
+                environment.GITLAB_TOKEN ||
+                environment.GITLAB_ACCESS_TOKEN ||
+                environment.OAUTH_TOKEN ||
+                (options.token?.() ?? "private-credential") ||
+                (environment.GLAB_ENABLE_CI_AUTOLOGIN === "true" ? environment.CI_JOB_TOKEN : "");
+              return Effect.succeed(
+                output(
+                  args[0] === "config"
+                    ? (options.protocol ?? "https")
+                    : `REST API Endpoint: ${options.endpoint ?? "https://api.example/api/v4/"}\nToken found in config file: ${token}`,
+                ),
+              );
+            },
+          }),
+        ),
+      ),
     ),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
     Layer.provide(
@@ -82,6 +96,27 @@ function fixture(
 }
 
 describe("GitLabUploadMedia", () => {
+  it.effect.each(["GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "OAUTH_TOKEN", "CI_JOB_TOKEN"])(
+    "does not use ambient %s for an upload-selected host",
+    (key) => {
+      const environment = { [key]: "ambient-secret", GLAB_ENABLE_CI_AUTOLOGIN: "true" };
+      const configured = fixture({ environment });
+      const unconfigured = fixture({ environment, token: () => "" });
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const service = yield* GitLabUploadMedia.GitLabUploadMedia;
+          expect((yield* service.respond(reference, {}, "GET")).status).toBe(200);
+          expect(configured.requests[0]?.headers["private-token"]).toBe("private-credential");
+        }).pipe(Effect.provide(configured.layer));
+        yield* Effect.gen(function* () {
+          const service = yield* GitLabUploadMedia.GitLabUploadMedia;
+          expect((yield* service.respond(reference, {}, "GET")).status).toBe(502);
+          expect(unconfigured.requests).toHaveLength(0);
+        }).pipe(Effect.provide(unconfigured.layer));
+      }).pipe(Effect.scoped);
+    },
+  );
+
   it.effect("streams decoded upload names through the HTTPS API and reuses the credential", () => {
     const f = fixture();
     return Effect.gen(function* () {
