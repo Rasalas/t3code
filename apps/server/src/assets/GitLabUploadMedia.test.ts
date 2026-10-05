@@ -1,13 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpClientResponse,
-  HttpServerResponse,
-} from "effect/unstable/http";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { FetchHttpClient, HttpClient, HttpClientResponse, HttpServerResponse } from "effect/http";
+import { ChildProcessSpawner } from "effect/process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { GitLabUploadReference } from "@t3tools/contracts";
 import * as GitLabUploadMedia from "./GitLabUploadMedia.ts";

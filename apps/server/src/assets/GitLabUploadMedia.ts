@@ -16,7 +16,7 @@ import {
   HttpClientRequest,
   HttpServerResponse,
   type HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 
 import * as ServerConfig from "../config.ts";
 import * as GitLabCli from "../sourceControl/GitLabCli.ts";
