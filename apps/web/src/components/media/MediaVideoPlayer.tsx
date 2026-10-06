@@ -195,8 +195,8 @@ export function MediaVideoPlayer({
           onEnded={refreshPausedRevision}
           onError={() => {
             if (fallbackSrc && src === fallbackSrc) setFailedSrc(src);
-            else if (fallbackSrc && src !== fallbackSrc) setFailedPrimarySrc(primarySrc);
             else if (latestSrc !== null && src !== latestSrc) setPlaybackSource(null);
+            else if (fallbackSrc && src !== fallbackSrc) setFailedPrimarySrc(primarySrc);
             else setFailedSrc(src);
           }}
         />

@@ -151,6 +151,26 @@ describe("GitLab MR media", () => {
     },
   );
 
+  it("keeps playing across re-signing and tries the refreshed URL before falling back on error", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    await act(async () => {
+      renderer = create(view(`![clip](${videoPath})`));
+    });
+    const playingUrl = state.url + "#t=2";
+    await act(async () => renderer!.root.findByType("video").props.onPlay());
+    state.url = "https://t3.test/api/assets/refreshed/video";
+    await act(async () => state.refresh());
+    expect(renderer!.root.findByType("video").props.src).toBe(playingUrl);
+
+    await act(async () => renderer!.root.findByType("video").props.onError());
+    expect(renderer!.root.findByType("video").props.src).toBe(state.url + "#t=2");
+    await act(async () => renderer!.root.findByType("video").props.onError());
+    expect(renderer!.root.findByType("video").props.src).toBe(context.repositoryUrl + videoPath);
+    await act(async () => renderer!.root.findByType("video").props.onPlay());
+    await act(async () => renderer!.root.findByType("video").props.onError());
+    expect(renderer!.root.findAllByType("video")).toHaveLength(0);
+  });
+
   it("leaves ordinary chat uploads outside GitLab MR handling", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     await act(async () => {
