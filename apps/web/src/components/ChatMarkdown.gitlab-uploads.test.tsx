@@ -50,8 +50,20 @@ vi.mock("./ui/tooltip", async () => {
 });
 vi.mock("../state/use-atom-query-runner", () => ({ useAtomQueryRunner: () => vi.fn() }));
 vi.mock("../state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
+vi.mock("../state/query", () => ({
+  useEnvironmentQuery: () => ({
+    data: null,
+    dataUpdatedAt: 0,
+    error: null,
+    failure: null,
+    isPending: true,
+    isSuccess: false,
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock("../state/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../state/session")>()),
+  useEnvironmentScope: () => true,
   usePreparedConnection: () => ({ _tag: "Loading" }),
 }));
 vi.mock("../state/entities", () => ({
