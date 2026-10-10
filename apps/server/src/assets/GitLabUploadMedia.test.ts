@@ -6,8 +6,8 @@ import { ChildProcessSpawner } from "effect/process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { GitLabUploadReference } from "@t3tools/contracts";
 import * as GitLabUploadMedia from "./GitLabUploadMedia.ts";
-import * as GitLabCli from "../sourceControl/GitLabCli.ts";
-import * as VcsProcess from "../vcs/VcsProcess.ts";
+import * as GitLabCli from "@t3tools/source-control-gitlab/server/GitLabCli";
+import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
 import * as ServerConfig from "../config.ts";
 
 const reference: GitLabUploadReference = {
@@ -58,24 +58,26 @@ function fixture(
     Layer.provide(
       GitLabCli.layer.pipe(
         Layer.provide(
-          Layer.mock(VcsProcess.VcsProcess)({
-            run: ({ args, env }) => {
-              commands.push(args);
-              const environment = { ...options.environment, ...env };
-              // glab gives ambient access tokens precedence over the selected host's stored token.
-              const token =
-                environment.GITLAB_TOKEN ||
-                environment.GITLAB_ACCESS_TOKEN ||
-                environment.OAUTH_TOKEN ||
-                (options.token?.() ?? "private-credential") ||
-                (environment.GLAB_ENABLE_CI_AUTOLOGIN === "true" ? environment.CI_JOB_TOKEN : "");
-              return Effect.succeed(
-                output(
-                  args[0] === "config"
-                    ? (options.protocol ?? "https")
-                    : `REST API Endpoint: ${options.endpoint ?? "https://api.example/api/v4/"}\nToken found in config file: ${token}`,
-                ),
-              );
+          TestSourceControlHost.layer({
+            process: {
+              run: ({ args, env }) => {
+                commands.push(args);
+                const environment = { ...options.environment, ...env };
+                // glab gives ambient access tokens precedence over the selected host's stored token.
+                const token =
+                  environment.GITLAB_TOKEN ||
+                  environment.GITLAB_ACCESS_TOKEN ||
+                  environment.OAUTH_TOKEN ||
+                  (options.token?.() ?? "private-credential") ||
+                  (environment.GLAB_ENABLE_CI_AUTOLOGIN === "true" ? environment.CI_JOB_TOKEN : "");
+                return Effect.succeed(
+                  output(
+                    args[0] === "config"
+                      ? (options.protocol ?? "https")
+                      : `REST API Endpoint: ${options.endpoint ?? "https://api.example/api/v4/"}\nToken found in config file: ${token}`,
+                  ),
+                );
+              },
             },
           }),
         ),

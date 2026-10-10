@@ -19,7 +19,7 @@ import {
 } from "effect/http";
 
 import * as ServerConfig from "../config.ts";
-import * as GitLabCli from "../sourceControl/GitLabCli.ts";
+import * as GitLabCli from "@t3tools/source-control-gitlab/server/GitLabCli";
 
 const Connection = Schema.Struct({
   apiBaseUrl: Schema.URLFromString.check(
