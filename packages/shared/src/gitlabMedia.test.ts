@@ -64,6 +64,10 @@ describe("gitlabMedia", () => {
       `[ref]: /uploads/${SECRET}/ref.pdf`,
       `Prose mentioning /uploads/${SECRET}/x.png stays prose.`,
       `![elsewhere](https://cdn.example.com/uploads/${SECRET}/a.png)`,
+      "```md",
+      `![in a fence](/uploads/${SECRET}/fenced.png)`,
+      "```",
+      `Inline \`![code](/uploads/${SECRET}/inline-code.png)\` stays as written.`,
     ].join("\n");
     expect(resolveGitLabUploadLinks(body, "https://gitlab.com/team/app/")).toBe(
       [
@@ -73,6 +77,10 @@ describe("gitlabMedia", () => {
         `[ref]: https://gitlab.com/team/app/uploads/${SECRET}/ref.pdf`,
         `Prose mentioning /uploads/${SECRET}/x.png stays prose.`,
         `![elsewhere](https://cdn.example.com/uploads/${SECRET}/a.png)`,
+        "```md",
+        `![in a fence](/uploads/${SECRET}/fenced.png)`,
+        "```",
+        `Inline \`![code](/uploads/${SECRET}/inline-code.png)\` stays as written.`,
       ].join("\n"),
     );
   });

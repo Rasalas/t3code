@@ -6,9 +6,13 @@
 
 const UPLOAD_PATH_PATTERN =
   /^\/(?:-\/project\/(\d+)|((?:[\w.-]+\/)*[\w.-]+))\/uploads\/([0-9a-f]{32})\/([^/]+)$/iu;
-/** A link destination, an HTML `src`/`href`, or a reference definition pointing at an upload. */
+/**
+ * An inline code span, kept as written, or a link destination, HTML `src`/`href`, or reference
+ * definition pointing at an upload.
+ */
 const RELATIVE_UPLOAD_PATTERN =
-  /(\]\(\s*<?|\b(?:src|href)\s*=\s*["']?|^ {0,3}\[[^\]\n]+\]:\s*<?)\/uploads\/(?=[0-9a-f]{32}\/)/gimu;
+  /(`+)[^`]*?\1|(\]\(\s*<?|\b(?:src|href)\s*=\s*["']?|^ {0,3}\[[^\]\n]+\]:\s*<?)\/uploads\/(?=[0-9a-f]{32}\/)/giu;
+const FENCE_PATTERN = /^\s{0,3}(`{3,}|~{3,})(.*)$/u;
 
 export interface GitLabUpload {
   readonly origin: string;
@@ -65,11 +69,30 @@ export function gitlabMediaFileName(fetchUrl: string): string {
   return name.length > 0 ? name : "gitlab-upload";
 }
 
-/** Rewrites GitLab's project-relative upload links against the project's web URL. */
+/** Rewrites GitLab's project-relative upload links against the project's web URL, outside code. */
 export function resolveGitLabUploadLinks(markdown: string, projectUrl: string): string {
   const base = projectUrl.replace(/\/+$/u, "");
-  return markdown.replace(
-    RELATIVE_UPLOAD_PATTERN,
-    (_, prefix: string) => `${prefix}${base}/uploads/`,
-  );
+  let openFence: string | null = null;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const fence = FENCE_PATTERN.exec(line);
+      if (fence !== null) {
+        const marker = fence[1]!;
+        if (openFence === null) openFence = marker;
+        else if (
+          marker[0] === openFence[0] &&
+          marker.length >= openFence.length &&
+          fence[2]!.trim() === ""
+        ) {
+          openFence = null;
+        }
+        return line;
+      }
+      if (openFence !== null) return line;
+      return line.replace(RELATIVE_UPLOAD_PATTERN, (match, _code, prefix: string | undefined) =>
+        prefix === undefined ? match : `${prefix}${base}/uploads/`,
+      );
+    })
+    .join("\n");
 }
