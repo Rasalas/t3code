@@ -358,23 +358,24 @@ export function changeRequestReferenceAutolinker(
 }
 
 /**
- * Forges link uploads root-relative, as GitCafe's `/api/attachments/<id>`. In a change request
- * body that always means the forge, never a path on the machine rendering it: the repository for
- * a host that says so, as GitLab's `/uploads/<secret>/<name>`, otherwise its origin.
+ * Forges link uploads root-relative, as GitCafe's `/api/attachments/<id>`. In a change request or
+ * issue body that always means the forge, never a path on the machine rendering it: the repository
+ * for a host that says so, as GitLab's `/uploads/<secret>/<name>`, otherwise its origin. `page` is
+ * the change request or issue the body belongs to.
  */
 export function resolveChangeRequestMediaUrl(
   url: string,
-  changeRequest: { readonly provider: string; readonly url: string },
+  page: { readonly provider: string; readonly url: string },
 ): string {
   if (!/^\/(?![/\\])/u.test(url)) return url;
-  const repositoryUrl = sourceControlClients
-    .find(changeRequest.provider)
-    ?.isRepositoryRelativePath?.(url)
-    ? sourceControlClients.parseChangeRequestUrl(changeRequest.url)?.link.repositoryUrl
-    : undefined;
   try {
-    return repositoryUrl === undefined
-      ? new URL(url, changeRequest.url).href
+    const pageUrl = new URL(page.url);
+    const definition = sourceControlClients.find(page.provider);
+    const repositoryUrl = definition?.isRepositoryRelativePath?.(url)
+      ? definition.repositoryUrlFromPage?.(pageUrl, true)
+      : null;
+    return repositoryUrl == null
+      ? new URL(url, pageUrl).href
       : `${repositoryUrl.replace(/\/+$/u, "")}${url}`;
   } catch {
     return url;

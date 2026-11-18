@@ -408,14 +408,24 @@ describe("change request media urls", () => {
   // regression: GitLab's project-relative `/uploads/<secret>/<name>` resolved against the origin
   it.each([
     [
+      "merge_requests/7",
       `/uploads/${"0".repeat(32)}/shot.png`,
       `https://gitlab.example.com/group/Sub/app/uploads/${"0".repeat(32)}/shot.png`,
     ],
-    ["/-/project/42/uploads/x/a.png", "https://gitlab.example.com/-/project/42/uploads/x/a.png"],
-  ])("resolves GitLab's %s against the project", (url, expected) => {
+    [
+      "merge_requests/7",
+      "/-/project/42/uploads/x/a.png",
+      "https://gitlab.example.com/-/project/42/uploads/x/a.png",
+    ],
+    [
+      "issues/3",
+      `/uploads/${"0".repeat(32)}/shot.png`,
+      `https://gitlab.example.com/group/Sub/app/uploads/${"0".repeat(32)}/shot.png`,
+    ],
+  ])("resolves GitLab's %s page link %s against the project", (page, url, expected) => {
     const changeRequest = {
       provider: "gitlab",
-      url: "https://gitlab.example.com/group/Sub/app/-/merge_requests/7",
+      url: `https://gitlab.example.com/group/Sub/app/-/${page}`,
     };
     expect(resolveChangeRequestMediaUrl(url, changeRequest)).toBe(expected);
   });

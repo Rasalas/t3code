@@ -62,7 +62,11 @@ import { PullRequestCandidatePicker } from "../pullRequest/PullRequestCandidateP
 import { PullRequestCommentBody } from "../pullRequest/PullRequestCommentBody";
 import { PullRequestDetailTitleRow } from "../pullRequest/PullRequestDetailLayout";
 import { PullRequestEditButton } from "../pullRequest/PullRequestEditButton";
-import { PullRequestMarkdown } from "../pullRequest/PullRequestMarkdown";
+import {
+  PullRequestMarkdown,
+  PullRequestMarkdownContext,
+} from "../pullRequest/PullRequestMarkdown";
+import { pullRequestMarkdownPlugins } from "../pullRequest/pullRequestMarkdown.logic";
 import { PullRequestMarkdownEditor } from "../pullRequest/PullRequestMarkdownEditor";
 import { readableFailure } from "../pullRequest/pullRequestDetail.logic";
 import { pullRequestLabelColor } from "../pullRequest/pullRequestList.logic";
@@ -510,6 +514,13 @@ export function IssueDetailPanel({
     return <IssueDetailGhost seed={listEntry} />;
   }
 
+  const markdownContext = {
+    remarkPlugins: pullRequestMarkdownPlugins({ provider: detail.tracker, url: detail.url }),
+    lineBreaks: false,
+    threadRef,
+    repository: null,
+  };
+
   const timeline: ReadonlyArray<TimelineItem> = [
     ...comments.map((c): TimelineItem => ({ kind: "comment", at: c.createdAt, comment: c })),
     ...detail.events.map((e): TimelineItem => ({ kind: "event", at: e.createdAt, event: e })),
@@ -833,14 +844,16 @@ export function IssueDetailPanel({
                 onCancel={() => setEditing(null)}
               />
             ) : (
-              <PullRequestMarkdown
-                text={
-                  detail.body.trim().length > 0 ? detail.body : gt("_No description provided._")
-                }
-                cwd={cwd}
-                environmentId={environmentId}
-                threadRef={threadRef}
-              />
+              <PullRequestMarkdownContext value={markdownContext}>
+                <PullRequestMarkdown
+                  text={
+                    detail.body.trim().length > 0 ? detail.body : gt("_No description provided._")
+                  }
+                  cwd={cwd}
+                  environmentId={environmentId}
+                  threadRef={threadRef}
+                />
+              </PullRequestMarkdownContext>
             )}
             {detail.reactions !== undefined ? (
               <IssueReactionBar
@@ -926,12 +939,14 @@ export function IssueDetailPanel({
                       </span>
                     )}
                   </PullRequestMetaLine>
-                  <PullRequestCommentBody
-                    text={item.comment.body}
-                    cwd={cwd}
-                    environmentId={environmentId}
-                    threadRef={threadRef}
-                  />
+                  <PullRequestMarkdownContext value={markdownContext}>
+                    <PullRequestCommentBody
+                      text={item.comment.body}
+                      cwd={cwd}
+                      environmentId={environmentId}
+                      threadRef={threadRef}
+                    />
+                  </PullRequestMarkdownContext>
                   {item.comment.reactions !== undefined ? (
                     <IssueReactionBar
                       reactions={item.comment.reactions}

@@ -10,6 +10,7 @@ import {
   CHAT_MARKDOWN_REHYPE_PLUGINS,
   CHAT_MARKDOWN_REMARK_PLUGINS,
 } from "@t3tools/shared/markdownPipeline";
+import { parseUrl } from "@t3tools/shared/url";
 import type { Nodes } from "hast";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
@@ -83,19 +84,26 @@ function remarkChangeRequestMediaUrls(options: {
 }
 
 const NO_PLUGINS: PluggableList = [];
+
+function repositoryUrlFromIssuePage(page: { readonly provider: string; readonly url: string }) {
+  const url = parseUrl(page.url);
+  return url && sourceControlClients.find(page.provider)?.repositoryUrlFromPage?.(url, true);
+}
 const markdownPlugins = new Map<string, PluggableList>();
 
 /**
  * One plugin list per repository, so every comment of a pull request shares one markdown
- * renderer and its parse cache instead of parsing again on each render.
+ * renderer and its parse cache instead of parsing again on each render. `changeRequest` may
+ * also be an issue, whose body links uploads the same way.
  */
 export function pullRequestMarkdownPlugins(
   changeRequest: { readonly provider: string; readonly url: string } | null,
 ): PluggableList {
   if (changeRequest === null) return NO_PLUGINS;
-  const repositoryUrl = sourceControlClients.parseChangeRequestUrl(changeRequest.url)?.link
-    .repositoryUrl;
-  if (repositoryUrl === undefined) return NO_PLUGINS;
+  const repositoryUrl =
+    sourceControlClients.parseChangeRequestUrl(changeRequest.url)?.link.repositoryUrl ??
+    repositoryUrlFromIssuePage(changeRequest);
+  if (repositoryUrl == null) return NO_PLUGINS;
   const key = `${changeRequest.provider}\u0000${repositoryUrl}`;
   let plugins = markdownPlugins.get(key);
   if (plugins === undefined) {
